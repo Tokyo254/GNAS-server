@@ -12,6 +12,7 @@ const {
   sendJournalistApprovalEmail,
   sendApprovalNotificationEmail
 } = require('../utils/emailService');
+const { app, authLimiter } = require('../server');
 
 // Helper function to sanitize user data for response
 const sanitizeUser = (user) => {
@@ -138,7 +139,7 @@ exports.registerJournalist = async (req, res) => {
       licenseFile,
       emailVerificationToken: verificationToken.token,
       emailVerificationExpires: verificationToken.expires,
-      status: 'pending',
+      status: 'pending', // Journalists need admin approval
       isEmailVerified: false
     });
 
@@ -375,18 +376,22 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Check account status
-    if (user.status !== 'active') {
-      let message = 'Your account is not active. ';
-      if (user.role === 'journalist' && user.status === 'pending') {
-        message += 'Your journalist account is pending admin approval.';
-      } else if (user.registrationMethod === 'endorsement' && user.status === 'pending') {
-        message += 'Your endorsement is pending admin approval.';
-      } else {
-        message += 'Please contact support.';
-      }
-      return res.status(401).json({ success: false, message });
-    }
+// Check account status
+if (user.status !== 'active') {
+  let message = 'Your account is not active. ';
+  
+  if (user.role === 'journalist' && user.status === 'pending') {
+    message += 'Your journalist account is pending admin approval. You have limited access.';
+    // Allow login but with limited functionality
+    // You can set a flag or handle this differently
+  } else if (user.role === 'comms' && user.status === 'pending') {
+    message += 'Your comms account is pending approval. Please contact support.';
+    return res.status(401).json({ success: false, message });
+  } else {
+    message += 'Please contact support.';
+    return res.status(401).json({ success: false, message });
+  }
+}
 
     // Reset login attempts and update last login
     await user.resetLoginAttempts();
@@ -465,22 +470,26 @@ exports.verifyEmail = async (req, res) => {
       });
     }
 
-    // Verify email
-    user.isEmailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpires = undefined;
+    // In verifyEmail function, update the status logic:
+// Verify email
+user.isEmailVerified = true;
+user.emailVerificationToken = undefined;
+user.emailVerificationExpires = undefined;
 
-    // Update status based on role and registration method
-    if (user.role === 'journalist') {
-      user.status = 'pending'; // Journalists need admin approval after email verification
-      await sendJournalistApprovalEmail(user);
-    } else if (user.registrationMethod === 'endorsement') {
-      user.status = 'pending'; // Endorsed users need admin approval
-    } else {
-      user.status = 'active'; // Comms professionals are active immediately
-    }
+// Update status based on role
+if (user.role === 'journalist') {
+  // Journalists remain pending until admin approval
+  user.status = 'pending';
+  await sendJournalistApprovalEmail(user);
+} else if (user.role === 'comms') {
+  // Comms are active immediately after email verification
+  user.status = 'active';
+} else if (user.role === 'admin') {
+  // Admins are always active
+  user.status = 'active';
+}
 
-    await user.save();
+await user.save();
 
     let message = 'Email verified successfully! ';
     if (user.role === 'journalist') {
@@ -759,3 +768,34 @@ exports.approveEndorsement = async (req, res) => {
     message: 'Endorsement approval not implemented' 
   });
 };
+
+// Add this function to create default admin
+const createDefaultAdmin = async () => {
+  try {
+    const existingAdmin = await User.findOne({ email: 'osogohkeith@gmail.com', role: 'admin' });
+    
+    if (!existingAdmin) {
+      const adminUser = new User({
+        firstName: 'Keith',
+        surname: 'Osogoh',
+        lastName: 'Admin',
+        email: 'osogohkeith@gmail.com',
+        password: 'Tokyo@254',
+        role: 'admin',
+        status: 'active',
+        isEmailVerified: true,
+        orgName: 'System Administration',
+        position: 'System Administrator'
+      });
+
+      await adminUser.save();
+      console.log('Default admin user created successfully');
+    }
+  } catch (error) {
+    console.error('Error creating default admin:', error);
+  }
+};
+
+// Call this function when your app starts
+createDefaultAdmin();
+app.use('/api/auth/register', authLimiter);

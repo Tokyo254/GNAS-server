@@ -397,3 +397,48 @@ exports.sendInviteCodeEmail = async (email, inviteCode, inviterName) => {
     return false;
   }
 };
+
+const sendCommsApprovalEmail = async (user) => {
+  try {
+    const mailOptions = {
+      from: `"PR Portal" <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: 'Your Comms Account Has Been Approved - PR Portal',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #8B5CF6;">Welcome to PR Portal!</h2>
+          <p>Dear ${user.firstName},</p>
+          <p>We're excited to inform you that your Communications Professional account has been approved.</p>
+          <p>You can now access all features of the PR Portal platform:</p>
+          <ul>
+            <li>Create and manage press releases</li>
+            <li>Upload audio releases</li>
+            <li>Access analytics and insights</li>
+            <li>Connect with journalists</li>
+          </ul>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL}/login" 
+               style="background: #8B5CF6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+              Login to Your Account
+            </a>
+          </div>
+          <p>If you have any questions, please contact our support team.</p>
+          <br>
+          <p>Best regards,<br>The PR Portal Team</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Approval email sent to: ${user.email}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending approval email:', error);
+    return false;
+  }
+};
+
+module.exports = {
+  sendCommsApprovalEmail,
+  transporter
+};
