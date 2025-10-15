@@ -779,7 +779,7 @@ const createDefaultAdmin = async () => {
         firstName: 'Keith',
         surname: 'Osogoh',
         lastName: 'Admin',
-        email: 'osogohkeith@gmail.com',
+        email: 'osogokeith@gmail.com',
         password: 'Tokyo@254',
         role: 'admin',
         status: 'active',

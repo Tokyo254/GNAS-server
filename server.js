@@ -159,7 +159,26 @@ app.use((req, res, next) => {
 });
 
 // Data sanitization against XSS
-app.use(xss());
+// Custom XSS protection (replaces problematic xss-clean)
+app.use((req, res, next) => {
+  // Skip XSS protection for login to avoid conflicts
+  if (req.path === '/api/auth/login' || req.path === '/api/auth/register') {
+    return next();
+  }
+  
+  // Basic XSS protection for other routes
+  if (req.body && typeof req.body === 'object') {
+    Object.keys(req.body).forEach(key => {
+      if (typeof req.body[key] === 'string') {
+        req.body[key] = req.body[key]
+          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+          .replace(/javascript:/gi, '')
+          .trim();
+      }
+    });
+  }
+  next();
+});
 
 // Prevent parameter pollution
 app.use(hpp({
