@@ -1,14 +1,18 @@
-require('dotenv').config();
+require('dotenv').config({
+   path: process.env.NODE_ENV === 'production' 
+    ? '.env.production' 
+    : '.env.local'
+});
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
-const xss = require('xss-clean');
 const hpp = require('hpp');
 const path = require('path');
 const fileUpload = require('express-fileupload');
+const fs = require('fs');
 
 const app = express();
 exports.app = app;
@@ -57,6 +61,7 @@ const authLimiter = rateLimit({
 });
 exports.authLimiter = authLimiter;
 app.use('/api/auth/login', authLimiter);
+
 // File upload middleware
 app.use(fileUpload({
   createParentPath: true,
@@ -69,53 +74,35 @@ app.use(fileUpload({
   debug: process.env.NODE_ENV === 'development'
 }));
 
-// CORS configuration
+// CORS configuration - UPDATED FOR RENDER
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
     const allowedOrigins = process.env.NODE_ENV === 'production' 
       ? [
-          process.env.CLIENT_URL || 'https://your-production-domain.com',
-          'https://your-app-name.vercel.app'
-        ]
+          process.env.CLIENT_URL,
+          'https://*.vercel.app',
+          process.env.RENDER_EXTERNAL_URL
+        ].filter(Boolean)
       : [
-          'http://localhost:3000',
           'http://localhost:5173',
-          'http://127.0.0.1:5173',
-          'http://localhost:5174'
+          'http://localhost:3000',
+          'http://127.0.0.1:5173'
         ];
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.includes(origin) || 
+        allowedOrigins.some(allowed => allowed.includes('*') && origin.includes(allowed.replace('*', '')))) {
       callback(null, true);
     } else {
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
-  ],
-  exposedHeaders: [
-    'Content-Range',
-    'X-Content-Range'
-  ],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options(/.*/, cors(corsOptions));
 
 // Body parsing middleware with increased limits for file uploads
 app.use(express.json({ 
@@ -194,6 +181,13 @@ app.use(hpp({
   ]
 }));
 
+// Ensure upload directory exists - ADDED FOR RENDER
+const uploadDir = './uploads';
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log('✅ Uploads directory created');
+}
+
 // Static files - secure configuration
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
@@ -204,59 +198,79 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     
     // Only set strict transport security in production
     if (process.env.NODE_ENV === 'production') {
-      res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  // Production security enhancements
+  app.set('trust proxy', 1);
+  
+  // Serve static files efficiently
+  app.use(express.static('uploads', {
+    maxAge: '1d',
+    setHeaders: (res, path) => {
+      res.set('Cache-Control', 'public, max-age=86400');
     }
+  }));
+}
   }
 }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
+// Enhanced health check endpoint for Render - UPDATED
+app.get('/health', async (req, res) => {
+  const healthCheck = {
     success: true,
     message: 'Server is healthy',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
+    environment: process.env.NODE_ENV || 'development',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    database: 'unknown'
+  };
+
+  try {
+    // Check database connection
+    if (mongoose.connection.readyState === 1) {
+      healthCheck.database = 'connected';
+    } else {
+      healthCheck.database = 'disconnected';
+      healthCheck.success = false;
+      healthCheck.message = 'Database connection issues';
+    }
+    
+    res.status(healthCheck.success ? 200 : 503).json(healthCheck);
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      message: 'Health check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
-// Database connection with improved error handling
+// Database connection with improved error handling for MongoDB Atlas
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/prportal', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
+    console.log(`🔗 Connecting to ${process.env.NODE_ENV} database...`);
+    
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     });
 
     console.log('✅ MongoDB connected successfully');
     console.log(`📊 Database: ${conn.connection.name}`);
-    console.log(`🏠 Host: ${conn.connection.host}:${conn.connection.port}`);
-
-    // Handle connection events
-    mongoose.connection.on('error', err => {
-      console.error('❌ MongoDB connection error:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.warn('⚠️ MongoDB disconnected');
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      console.log('✅ MongoDB reconnected');
-    });
+    console.log(`🏠 Host: ${conn.connection.host}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
 
   } catch (err) {
-    console.error('❌ MongoDB connection error:', err);
+    console.error('❌ MongoDB connection failed:', err.message);
     
-    if (err.name === 'MongooseServerSelectionError') {
-      console.error('💡 Tips:');
-      console.error('1. Make sure MongoDB is running');
-      console.error('2. Check your MONGODB_URI in .env file');
-      console.error('3. For local development: run "mongod" or "brew services start mongodb-community"');
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔄 Server continues running - will retry connection');
+    } else {
+      console.log('💡 Development Tips:');
+      console.log('1. For local MongoDB: run "mongod" or use Docker');
+      console.log('2. For Docker: docker run -d -p 27017:27017 --name mongodb mongo:latest');
+      process.exit(1);
     }
-    
-    process.exit(1);
   }
 };
 
@@ -269,31 +283,55 @@ const routes = require('./routes');
 // API routes
 app.use('/api', routes);
 
+// Custom 404 handler for API routes - FIXED APPROACH
+app.use((req, res, next) => {
+  if (req.originalUrl.startsWith('/api/')) {
+    return res.status(404).json({
+      success: false,
+      message: `API endpoint ${req.originalUrl} not found`
+    });
+  }
+  next();
+});
+
 // Serve static files in production (for React/Vite build)
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/dist')));
 
-  app.get('*', (req, res) => {
+  // Catch-all handler for client-side routing - FIXED
+  app.use((req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist/index.html'));
   });
-}
-
-// 404 handler for API routes - using regex pattern
-app.use(/^\/api\//, (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `API endpoint ${req.originalUrl} not found`
+} else {
+  // Development 404 handler for non-API routes
+  app.use((req, res) => {
+    res.status(404).json({
+      success: false,
+      message: `Route ${req.originalUrl} not found`
+    });
   });
-});
+}
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('🚨 Global error handler:', err);
 
   // Log more details in development
-  if (process.env.NODE_ENV === 'development') {
-    console.error('Stack trace:', err.stack);
-  }
+if (process.env.NODE_ENV === 'development') {
+  // Development-only middleware
+  const morgan = require('morgan');
+  app.use(morgan('dev'));
+  
+  // Enhanced error details
+  app.use((err, req, res, next) => {
+    console.error('Development Error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+      stack: err.stack
+    });
+  });
+}
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
@@ -411,6 +449,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
    Local: http://localhost:${PORT}
    Network: http://0.0.0.0:${PORT}
 🔗 Health check: http://localhost:${PORT}/health
+✅ CORS enabled for: ${process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : 'localhost'}
   `);
 });
 

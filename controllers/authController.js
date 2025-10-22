@@ -772,19 +772,20 @@ exports.approveEndorsement = async (req, res) => {
 // Add this function to create default admin
 const createDefaultAdmin = async () => {
   try {
-    const existingAdmin = await User.findOne({ email: 'osogohkeith@gmail.com', role: 'admin' });
+    const existingAdmin = await User.findOne({ email: 'admin@gnias.com', role: 'admin' });
     
     if (!existingAdmin) {
       const adminUser = new User({
         firstName: 'Keith',
         surname: 'Osogoh',
         lastName: 'Admin',
-        email: 'osogokeith@gmail.com',
+        email: 'admin@gnias.com',
         password: 'Tokyo@254',
         role: 'admin',
         status: 'active',
         isEmailVerified: true,
-        orgName: 'System Administration',
+        orgName: 'System Administration'
+        ,
         position: 'System Administrator'
       });
 

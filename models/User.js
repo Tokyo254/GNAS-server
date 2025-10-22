@@ -111,7 +111,7 @@ userSchema.virtual('isLocked').get(function() {
 });
 
 // Indexes for better performance
-userSchema.index({ email: 1 });
+//userSchema.index({ email: 1 });
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ 'emailVerificationExpires': 1 }, { expireAfterSeconds: 0 });
 
