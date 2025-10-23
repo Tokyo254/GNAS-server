@@ -13,6 +13,7 @@ const hpp = require('hpp');
 const path = require('path');
 const fileUpload = require('express-fileupload');
 const fs = require('fs');
+const {createDefaultAdmin} = require('./controllers/authController');
 
 const app = express();
 exports.app = app;
@@ -251,14 +252,23 @@ const connectDB = async () => {
     console.log(`🔗 Connecting to ${process.env.NODE_ENV} database...`);
     
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 30000,
+      bufferCommands: true,
+      bufferTimeoutMS: 30000
     });
 
     console.log('✅ MongoDB connected successfully');
     console.log(`📊 Database: ${conn.connection.name}`);
     console.log(`🏠 Host: ${conn.connection.host}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
+    console.log('👨‍💼 Creating default admin user...');
+    const adminResult = await createDefaultAdmin();
+    if (adminResult.success) {
+      console.log('✅ Admin user setup completed');
+    } else {
+      console.log('⚠️ Admin user setup had issues, but server continues');
+    }
 
   } catch (err) {
     console.error('❌ MongoDB connection failed:', err.message);

@@ -769,34 +769,33 @@ exports.approveEndorsement = async (req, res) => {
   });
 };
 
-// Add this function to create default admin
-const createDefaultAdmin = async () => {
+// Export the function instead of calling it
+exports.createDefaultAdmin = async () => {
   try {
-    const existingAdmin = await User.findOne({ email: 'admin@gnias.com', role: 'admin' });
+    const existingAdmin = await User.findOne({ email: process.env.DEFAULT_ADMIN_EMAIL, 
+                                role: 'admin' 
+                                });
     
     if (!existingAdmin) {
       const adminUser = new User({
-        firstName: 'Keith',
-        surname: 'Osogoh',
+        firstName: 'System',
+        surname: 'Administrator',
         lastName: 'Admin',
-        email: 'admin@gnias.com',
-        password: 'Tokyo@254',
+        email: process.env.DEFAULT_ADMIN_EMAIL,
+        password: process.env.DEFAULT_ADMIN_PASSWORD,
         role: 'admin',
         status: 'active',
         isEmailVerified: true,
-        orgName: 'System Administration'
-        ,
-        position: 'System Administrator'
+        orgName: 'System Administration',
+        position: 'System Administrator',
+        registrationMethod: 'email'
       });
 
       await adminUser.save();
-      console.log('Default admin user created successfully');
+      console.log('✅Default admin user created successfully');
     }
   } catch (error) {
     console.error('Error creating default admin:', error);
   }
 };
 
-// Call this function when your app starts
-createDefaultAdmin();
-app.use('/api/auth/register', authLimiter);
