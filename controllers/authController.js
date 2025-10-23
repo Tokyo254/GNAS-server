@@ -792,10 +792,15 @@ exports.createDefaultAdmin = async () => {
       });
 
       await adminUser.save();
-      console.log('✅Default admin user created successfully');
+      console.log('✅ Default admin user created successfully');
+      return { success: true, created: true }; // ✅ Ensure return
+    } else {
+      console.log('✅ Default admin user already exists');
+      return { success: true, created: false }; // ✅ Ensure return
     }
   } catch (error) {
-    console.error('Error creating default admin:', error);
+    console.error('❌ Error creating default admin:', error.message);
+    return { success: false, error: error.message }; // ✅ Ensure return
   }
 };
 
