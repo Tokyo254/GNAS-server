@@ -305,22 +305,22 @@ app.use((req, res, next) => {
 });
 
 // Serve static files in production (for React/Vite build)
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+//if (process.env.NODE_ENV === 'production') {
+//app.use(express.static(path.join(__dirname, '../client/dist')));
 
-  // Catch-all handler for client-side routing - FIXED
-  app.use((req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
-  });
-} else {
-  // Development 404 handler for non-API routes
-  app.use((req, res) => {
-    res.status(404).json({
-      success: false,
-      message: `Route ${req.originalUrl} not found`
-    });
-  });
-}
+// Catch-all handler for client-side routing - FIXED
+//  app.use((req, res) => {
+//   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+//  });
+//} else {
+// Development 404 handler for non-API routes
+//  app.use((req, res) => {
+//    res.status(404).json({
+//      success: false,
+//      message: `Route ${req.originalUrl} not found`
+//    });
+//  });
+// }
 
 // Global error handler
 app.use((err, req, res, next) => {
