@@ -16,7 +16,6 @@ const fs = require('fs');
 const {createDefaultAdmin} = require('./controllers/authController');
 
 const app = express();
-exports.app = app;
 
 // Security middleware
 app.use(helmet({
@@ -57,11 +56,10 @@ const authLimiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 5 : 50, // Higher limit in development
   message: {
     success: false,
-    message: 'Too many authentication attempts, please try again later.'
+    message: 'Too many login attempts'
   }
 });
-exports.authLimiter = authLimiter;
-app.use('/api/auth/login', authLimiter);
+
 
 // File upload middleware
 app.use(fileUpload({
@@ -81,7 +79,7 @@ const corsOptions = {
     const allowedOrigins = process.env.NODE_ENV === 'production' 
       ? [
           process.env.CLIENT_URL,
-          'https://*.vercel.app',
+          'https://gnas-h3me.vercel.app/',
           process.env.RENDER_EXTERNAL_URL
         ].filter(Boolean)
       : [
@@ -105,7 +103,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Body parsing middleware with increased limits for file uploads
+// Body parsers
 app.use(express.json({ 
   limit: '50mb',
   verify: (req, res, buf) => {
@@ -118,13 +116,12 @@ app.use(express.urlencoded({
   parameterLimit: 100000
 }));
 
-// Custom NoSQL injection protection (REPLACES express-mongo-sanitize)
+// Custom NoSQL injection protection 
 app.use((req, res, next) => {
   const sanitize = (obj) => {
     if (!obj || typeof obj !== 'object') return obj;
     
     Object.keys(obj).forEach(key => {
-      // Remove MongoDB operators
       if (key.startsWith('$')) {
         console.warn(`🚨 NoSQL injection attempt blocked:`, { key, value: obj[key] });
         delete obj[key];
@@ -146,19 +143,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Data sanitization against XSS
-// Custom XSS protection (replaces problematic xss-clean)
-app.use((req, res, next) => {
-  // Skip XSS protection for login to avoid conflicts
-  if (req.path === '/api/auth/login' || req.path === '/api/auth/register') {
-    return next();
-  }
-  
-  // Basic XSS protection for other routes
+// Basic XSS protection (skip auth routes)
+app.use((req, _res, next) => {
+  if (['/api/auth/login', '/api/auth/register'].includes(req.path)) return next();
   if (req.body && typeof req.body === 'object') {
-    Object.keys(req.body).forEach(key => {
-      if (typeof req.body[key] === 'string') {
-        req.body[key] = req.body[key]
+    Object.keys(req.body).forEach(k => {
+      if (typeof req.body[k] === 'string') {
+        req.body[k] = req.body[k]
           .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
           .replace(/javascript:/gi, '')
           .trim();
@@ -168,7 +159,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Prevent parameter pollution
 app.use(hpp({
   whitelist: [
     'page',
@@ -182,7 +172,7 @@ app.use(hpp({
   ]
 }));
 
-// Ensure upload directory exists - ADDED FOR RENDER
+// upload directory
 const uploadDir = './uploads';
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -226,7 +216,6 @@ app.get('/health', async (req, res) => {
   };
 
   try {
-    // Check database connection
     if (mongoose.connection.readyState === 1) {
       healthCheck.database = 'connected';
     } else {
