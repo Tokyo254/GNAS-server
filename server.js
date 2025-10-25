@@ -17,6 +17,7 @@ const adminInitializer = require('./scripts/initAdmin');
 const secureAdminInitializer = require('./scripts/initAdmin');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
@@ -54,7 +55,7 @@ app.use('/api/', limiter);
 // More lenient auth rate limiting for development
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 5 : 50, // Higher limit in development
+  max: process.env.NODE_ENV === 'production' ? 5 : 50, 
   message: {
     success: false,
     message: 'Too many login attempts'
@@ -80,7 +81,8 @@ const corsOptions = {
     const allowedOrigins = process.env.NODE_ENV === 'production' 
       ? [
           process.env.CLIENT_URL,
-          'https://gnas.vercel.app/',
+          'https://gnas.vercel.app',           // ← YOUR LIVE FRONTEND
+          'https://gnas-h3me.vercel.app',
           process.env.RENDER_EXTERNAL_URL
         ].filter(Boolean)
       : [
@@ -89,8 +91,10 @@ const corsOptions = {
           'http://127.0.0.1:5173'
         ];
     
-    if (!origin || allowedOrigins.includes(origin) || 
-        allowedOrigins.some(allowed => allowed.includes('*') && origin.includes(allowed.replace('*', '')))) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
