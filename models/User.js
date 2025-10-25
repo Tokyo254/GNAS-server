@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema({
   },
   registrationMethod: { 
     type: String, 
-    enum: ['email', 'endorsement', 'invite'], 
+    enum: ['email', 'endorsement', 'invite','system'], 
     default: 'email' 
   },
   
@@ -90,7 +90,6 @@ const userSchema = new mongoose.Schema({
   toJSON: { 
     virtuals: true,
     transform: function(doc, ret) {
-      // Remove sensitive fields when converting to JSON
       delete ret.password;
       delete ret.emailVerificationToken;
       delete ret.passwordResetToken;
