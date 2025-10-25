@@ -74,13 +74,13 @@ app.use(fileUpload({
   debug: process.env.NODE_ENV === 'development'
 }));
 
-// CORS configuration - UPDATED FOR RENDER
+// CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = process.env.NODE_ENV === 'production' 
       ? [
           process.env.CLIENT_URL,
-          'https://gnas-h3me.vercel.app/',
+          'https://gnas.vercel.app/',
           process.env.RENDER_EXTERNAL_URL
         ].filter(Boolean)
       : [
