@@ -12,7 +12,6 @@ const {
   sendJournalistApprovalEmail,
   sendApprovalNotificationEmail
 } = require('../utils/emailService');
-const { app, authLimiter } = require('../server');
 
 // Helper function to sanitize user data for response
 const sanitizeUser = (user) => {

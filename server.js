@@ -13,7 +13,8 @@ const hpp = require('hpp');
 const path = require('path');
 const fileUpload = require('express-fileupload');
 const fs = require('fs');
-const {createDefaultAdmin} = require('./controllers/authController');
+const adminInitializer = require('./scripts/initAdmin');
+const secureAdminInitializer = require('./scripts/initAdmin');
 
 const app = express();
 
@@ -244,26 +245,25 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 30000,
       bufferCommands: true,
-      bufferTimeoutMS: 30000
+      bufferTimeoutMS: 30000,
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      maxIdleTimeMS: 30000
     });
 
     console.log('✅ MongoDB connected successfully');
     console.log(`📊 Database: ${conn.connection.name}`);
     console.log(`🏠 Host: ${conn.connection.host}`);
-    console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
-    console.log('👨‍💼 Creating default admin user...');
-    const adminResult = await createDefaultAdmin();
-    if (adminResult.success) {
-      console.log('✅ Admin user setup completed');
-    } else {
-      console.log('⚠️ Admin user setup had issues, but server continues');
-    }
+    
+    // Initialize admin securely
+    initializeSecureAdminWithRetry();
 
   } catch (err) {
     console.error('❌ MongoDB connection failed:', err.message);
     
     if (process.env.NODE_ENV === 'production') {
       console.log('🔄 Server continues running - will retry connection');
+      setTimeout(connectDB, 10000);
     } else {
       console.log('💡 Development Tips:');
       console.log('1. For local MongoDB: run "mongod" or use Docker');
@@ -272,6 +272,150 @@ const connectDB = async () => {
     }
   }
 };
+
+// Secure admin initialization
+const initializeSecureAdminWithRetry = async (attempt = 1) => {
+  const maxAttempts = 3;
+  const baseDelay = 2000;
+  
+  try {
+    const result = await secureAdminInitializer.initialize();
+    
+    if (result.success) {
+      if (result.created) {
+        console.log(`🎉 Secure admin user created: ${result.user.email}`);
+        // Log security event
+        console.log(`🔒 Admin password securely hashed with bcrypt`);
+      } else if (result.reason) {
+        console.log(`ℹ️  Admin initialization: ${result.reason}`);
+      }
+    } else if (result.retryable && attempt <= maxAttempts) {
+      const delay = baseDelay * attempt;
+      console.log(`🔄 Retrying admin initialization in ${delay}ms (attempt ${attempt}/${maxAttempts})...`);
+      
+      setTimeout(() => initializeSecureAdminWithRetry(attempt + 1), delay);
+    } else if (!result.success) {
+      console.warn(`⚠️  Admin initialization failed after ${attempt} attempts: ${result.error}`);
+    }
+  } catch (error) {
+    console.error(`❌ Unexpected error in admin initialization: ${error.message}`);
+  }
+};
+
+// Secure manual admin initialization endpoint
+app.post('/api/admin/initialize', async (req, res) => {
+  try {
+    // Security: Only allow in development OR with secret key in production
+    const authHeader = req.headers['x-admin-init-key'];
+    const validKey = process.env.ADMIN_INIT_SECRET;
+    
+    // In production, require valid secret key
+    if (process.env.NODE_ENV === 'production') {
+      if (!authHeader || authHeader !== validKey) {
+        console.warn('🚨 Unauthorized admin initialization attempt');
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Valid x-admin-init-key header required'
+        });
+      }
+    }
+    
+    // In development, log if no key provided but allow
+    if (process.env.NODE_ENV === 'development' && !authHeader) {
+      console.warn('⚠️  Development: Admin initialization without auth key');
+    }
+
+    const result = await secureAdminInitializer.secureRetry(authHeader);
+    
+    // Security: Don't expose sensitive details in response
+    const safeResult = {
+      success: result.success,
+      created: result.created,
+      message: result.success ? 
+        (result.created ? 'Admin user created successfully' : 'Admin user already exists') : 
+        'Initialization failed'
+    };
+    
+    // Add limited details for debugging in development
+    if (process.env.NODE_ENV === 'development') {
+      safeResult.details = {
+        reason: result.reason,
+        hasCredentials: secureAdminInitializer.hasRequiredCredentials()
+      };
+    }
+    
+    res.json(safeResult);
+    
+  } catch (error) {
+    console.error('❌ Secure admin initialization endpoint error:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Manual initialization failed',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+    });
+  }
+});
+
+// Secure admin status endpoint
+app.get('/api/admin/status', (req, res) => {
+  // Basic status is public, but limit sensitive info
+  const status = secureAdminInitializer.getStatus();
+  
+  const publicStatus = {
+    initialized: status.initialized,
+    initializing: status.initializing,
+    environment: status.environment,
+    requiresAuth: status.requiresAuth
+  };
+  
+  // Add credentials check only in development
+  if (process.env.NODE_ENV === 'development') {
+    publicStatus.hasCredentials = status.hasCredentials;
+  }
+  
+  res.json({
+    success: true,
+    data: publicStatus
+  });
+});
+
+// Enhanced health check
+app.get('/health', async (req, res) => {
+  const healthCheck = {
+    success: true,
+    message: 'Server is healthy',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    database: 'unknown',
+    admin: {
+      initialized: secureAdminInitializer.initialized,
+      environment: process.env.NODE_ENV
+    }
+  };
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      healthCheck.database = 'connected';
+    } else {
+      healthCheck.database = 'disconnected';
+      healthCheck.success = false;
+      healthCheck.message = 'Database connection issues';
+    }
+    
+    res.status(healthCheck.success ? 200 : 503).json(healthCheck);
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      message: 'Health check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 
 // Initialize database connection
 connectDB();
