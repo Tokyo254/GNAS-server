@@ -61,6 +61,7 @@ class SecureAdminInitializer {
         email: process.env.DEFAULT_ADMIN_EMAIL.toLowerCase(),
         password: hashedPassword,
         role: 'admin',
+        registrationMethod: 'system',
         status: 'active',
         isEmailVerified: true,
         orgName: process.env.DEFAULT_ADMIN_ORG || 'System Administration',
