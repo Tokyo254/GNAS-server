@@ -84,7 +84,7 @@ const corsOptions = {
           'https://gnas.vercel.app',
           'https://gnas-h3me.vercel.app',
           process.env.CLIENT_URL,
-          process.env.RENDER_EXTERNAL_URL
+          process.env.SERVER_URL
         ].filter(Boolean)
       : [
           'http://localhost:5173',
