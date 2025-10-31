@@ -47,6 +47,32 @@ const userSchema = new mongoose.Schema({
     size: Number,
     url: String
   },
+   // Blog-specific fields
+  bio: {
+    type: String,
+    maxlength: [500, 'Bio cannot exceed 500 characters']
+  },
+  avatar: {
+    url: String,
+    filename: String
+  },
+  verified: {
+    type: Boolean,
+    default: false
+  },
+  title: {
+    type: String,
+    trim: true
+  },
+  company: {
+    type: String,
+    trim: true
+  },
+  socialLinks: {
+    website: String,
+    twitter: String,
+    linkedin: String
+  },
   
   // Comms professional specific fields
   orgName: { 

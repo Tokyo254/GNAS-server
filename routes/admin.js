@@ -18,20 +18,23 @@ router.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 router.get('/analytics', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
-    const pendingComms = await User.countDocuments({ role: 'comms', status: 'pending' });
+    const activeComms = await User.countDocuments({ role: 'comms', status: 'active' });
     const totalReleases = await PressRelease.countDocuments();
     const activeJournalists = await User.countDocuments({ role: 'journalist', status: 'active' });
     const totalAdmins = await User.countDocuments({ role: 'admin' });
+    const pendingJournalists = await User.countDocuments({ role: 'journalist', status: 'pending' });
 
     res.json({
       success: true,
       data: {
         totalUsers,
-        pendingComms,
+        activeComms,
         totalReleases,
         activeJournalists,
+        pendingJournalists,
         totalAdmins,
         systemHealth: 98.5 // Mock system health
+        
       }
     });
   } catch (error) {
@@ -304,7 +307,7 @@ router.post('/bulk-upload/users', async (req, res) => {
             country: data.country?.trim() || '',
             interests: data.interests ? data.interests.split(',').map(i => i.trim()).filter(i => i) : [],
             role: 'comms',
-            status: 'pending', // Comms require approval
+            status: 'active',
             registrationMethod: 'bulk_upload'
           });
         })
@@ -348,6 +351,22 @@ router.post('/bulk-upload/users', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error processing bulk upload'
+    });
+  }
+});
+// Update whistleblower route to be admin-only (it already is due to the router.use(protect, authorize('admin')))
+router.get('/whistleblower-messages', async (req, res) => {
+  try {
+    // This route remains admin-only due to the router-level middleware
+    res.json({
+      success: true,
+      data: [],
+      message: 'Whistleblower messages endpoint - admin access only'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching whistleblower messages'
     });
   }
 });

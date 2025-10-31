@@ -81,7 +81,7 @@ const corsOptions = {
     const allowedOrigins = process.env.NODE_ENV === 'production' 
       ? [
           process.env.CLIENT_URL,
-          'https://gnas.vercel.app',           // ← YOUR LIVE FRONTEND
+          'https://gnas.vercel.app',          
           'https://gnas-h3me.vercel.app',
           process.env.RENDER_EXTERNAL_URL
         ].filter(Boolean)
