@@ -76,13 +76,14 @@ app.use(fileUpload({
 }));
 
 // CORS configuration
+// CORS configuration - UPDATED FOR PRODUCTION
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = process.env.NODE_ENV === 'production' 
       ? [
-          process.env.CLIENT_URL,
-          'https://gnas.vercel.app',          
+          'https://gnas.vercel.app',
           'https://gnas-h3me.vercel.app',
+          process.env.CLIENT_URL,
           process.env.RENDER_EXTERNAL_URL
         ].filter(Boolean)
       : [
@@ -98,7 +99,12 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      // In production, you might want to be more restrictive
+      if (process.env.NODE_ENV === 'production') {
+        callback(new Error('Not allowed by CORS'));
+      } else {
+        callback(null, true); // Be more permissive in development
+      }
     }
   },
   credentials: true,

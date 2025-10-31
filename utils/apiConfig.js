@@ -1,4 +1,15 @@
-export const API_BASE_URL = 'http://localhost:5000/api';
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // Client-side: Use relative path or full URL based on environment
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000/api';
+    } else {
+      // Production - use relative path or your production backend URL
+      return 'https://your-backend-domain.com/api'; // Replace with your actual backend URL
+    }
+  }
+  return 'http://localhost:5000/api'; // Default for server-side
+};
 
 export const API_ENDPOINTS = {
   AUTH: {
