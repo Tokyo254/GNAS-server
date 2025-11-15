@@ -6,12 +6,16 @@ const authRoutes = require('./auth');
 const adminRoutes = require('./admin');
 const journalistRoutes = require('./journalist');
 const commsRoutes = require('./comms');
+const blogRoutes = require('./blog');
+const commentRoutes = require('./comments'); 
 
 // Route modules
 router.use('/auth', authRoutes);
 router.use('/admin', adminRoutes);
 router.use('/journalist', journalistRoutes);
 router.use('/comms', commsRoutes);
+router.use('/blog', blogRoutes);
+router.use('/comments', commentRoutes);
 
 // Root API endpoint
 router.get('/', (req, res) => {
@@ -24,7 +28,9 @@ router.get('/', (req, res) => {
       auth: '/api/auth',
       admin: '/api/admin',
       journalist: '/api/journalist',
-      comms: '/api/comms'
+      comms: '/api/comms',
+      blog: '/api/blog',
+      comments: '/api/comments'
     }
   });
 });

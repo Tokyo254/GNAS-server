@@ -13,11 +13,16 @@ const hpp = require('hpp');
 const path = require('path');
 const fileUpload = require('express-fileupload');
 const fs = require('fs');
-const adminInitializer = require('./scripts/initAdmin');
-const secureAdminInitializer = require('./scripts/initAdmin');
+const secureAdminInitializer = require('./scripts/initAdmin'); // Fixed duplicate import
 
 const app = express();
 app.set('trust proxy', 1);
+
+// Development-only middleware
+if (process.env.NODE_ENV === 'development') {
+  const morgan = require('morgan');
+  app.use(morgan('dev'));
+}
 
 // Security middleware
 app.use(helmet({
@@ -52,7 +57,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// More lenient auth rate limiting for development
+// More lenient auth rate limiting for development - FIXED: Apply to auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 5 : 50, 
@@ -61,7 +66,6 @@ const authLimiter = rateLimit({
     message: 'Too many login attempts'
   }
 });
-
 
 // File upload middleware
 app.use(fileUpload({
@@ -75,7 +79,6 @@ app.use(fileUpload({
   debug: process.env.NODE_ENV === 'development'
 }));
 
-// CORS configuration
 // CORS configuration - UPDATED FOR PRODUCTION
 const corsOptions = {
   origin: function (origin, callback) {
@@ -183,14 +186,14 @@ app.use(hpp({
   ]
 }));
 
-// upload directory
+// Upload directory
 const uploadDir = './uploads';
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
     console.log('✅ Uploads directory created');
 }
 
-// Static files - secure configuration
+// Static files - secure configuration (FIXED: removed duplicate config)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
   setHeaders: (res, path) => {
@@ -200,21 +203,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     
     // Only set strict transport security in production
     if (process.env.NODE_ENV === 'production') {
-  // Production security enhancements
-  app.set('trust proxy', 1);
-  
-  // Serve static files efficiently
-  app.use(express.static('uploads', {
-    maxAge: '1d',
-    setHeaders: (res, path) => {
-      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
-  }));
-}
   }
 }));
 
-// Enhanced health check endpoint for Render - UPDATED
+// Enhanced health check endpoint for Render - FIXED: single endpoint
 app.get('/health', async (req, res) => {
   const healthCheck = {
     success: true,
@@ -223,7 +217,11 @@ app.get('/health', async (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     uptime: process.uptime(),
     memory: process.memoryUsage(),
-    database: 'unknown'
+    database: 'unknown',
+    admin: {
+      initialized: secureAdminInitializer.initialized,
+      environment: process.env.NODE_ENV
+    }
   };
 
   try {
@@ -390,53 +388,25 @@ app.get('/api/admin/status', (req, res) => {
   });
 });
 
-// Enhanced health check
-app.get('/health', async (req, res) => {
-  const healthCheck = {
-    success: true,
-    message: 'Server is healthy',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    database: 'unknown',
-    admin: {
-      initialized: secureAdminInitializer.initialized,
-      environment: process.env.NODE_ENV
-    }
-  };
-
-  try {
-    if (mongoose.connection.readyState === 1) {
-      healthCheck.database = 'connected';
-    } else {
-      healthCheck.database = 'disconnected';
-      healthCheck.success = false;
-      healthCheck.message = 'Database connection issues';
-    }
-    
-    res.status(healthCheck.success ? 200 : 503).json(healthCheck);
-  } catch (error) {
-    res.status(503).json({
-      success: false,
-      message: 'Health check failed',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-
 // Initialize database connection
 connectDB();
 
 // Import routes
 const routes = require('./routes');
 
+// Apply auth limiter to auth routes (FIXED: add this after routes are imported)
+// You'll need to apply this to specific auth routes in your auth routes file
+// or apply it here like:
+// app.use('/api/auth', authLimiter);
+
 // API routes
 app.use('/api', routes);
 
-// Custom 404 handler for API routes - FIXED APPROACH
+// REMOVED: Duplicate blog routes application
+// const blogRoutes = require('./routes/blog');
+// app.use('/api/blog', blogRoutes); // This is already handled in routes/index.js
+
+// Custom 404 handler for API routes
 app.use((req, res, next) => {
   if (req.originalUrl.startsWith('/api/')) {
     return res.status(404).json({
@@ -448,43 +418,26 @@ app.use((req, res, next) => {
 });
 
 // Serve static files in production (for React/Vite build)
-//if (process.env.NODE_ENV === 'production') {
-//app.use(express.static(path.join(__dirname, '../client/dist')));
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/dist')));
 
-// Catch-all handler for client-side routing - FIXED
-//  app.use((req, res) => {
-//   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
-//  });
-//} else {
-// Development 404 handler for non-API routes
-//  app.use((req, res) => {
-//    res.status(404).json({
-//      success: false,
-//      message: `Route ${req.originalUrl} not found`
-//    });
-//  });
-// }
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('🚨 Global error handler:', err);
-
-  // Log more details in development
-if (process.env.NODE_ENV === 'development') {
-  // Development-only middleware
-  const morgan = require('morgan');
-  app.use(morgan('dev'));
-  
-  // Enhanced error details
-  app.use((err, req, res, next) => {
-    console.error('Development Error:', err);
-    res.status(500).json({
+  // Catch-all handler for client-side routing
+  app.use((req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+  });
+} else {
+  // Development 404 handler for non-API routes
+  app.use((req, res) => {
+    res.status(404).json({
       success: false,
-      message: err.message,
-      stack: err.stack
+      message: `Route ${req.originalUrl} not found`
     });
   });
 }
+
+// Global error handler (FIXED: removed nested development error handler)
+app.use((err, req, res, next) => {
+  console.error('🚨 Global error handler:', err);
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {

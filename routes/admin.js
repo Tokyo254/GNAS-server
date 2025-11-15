@@ -7,6 +7,7 @@ const csv = require('csv-parser');
 const stream = require('stream');
 const { sendCommsApprovalEmail } = require('../utils/emailService');
 const path = require('path');
+const { seedDemoData } = require('../scripts/seedDemoData');
 
 // All admin routes require admin role
 router.use(protect, authorize('admin'));
@@ -540,6 +541,46 @@ router.post('/bulk-upload/releases', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error processing bulk upload'
+    });
+  }
+});
+router.post('/seed-demo-data', protect, authorize('admin'), async (req, res) => {
+  try {
+    console.log('🔧 Admin demo data seeding requested by:', req.user.email);
+
+    // Additional security check for production
+    if (process.env.NODE_ENV === 'production' && !req.headers['x-demo-seed-key']) {
+      return res.status(401).json({
+        success: false,
+        message: 'Demo data seeding requires authorization key in production'
+      });
+    }
+
+    const result = await seedDemoData(req.user._id);
+
+    if (result.success) {
+      // Log security event
+      console.log(`📊 Demo data seeded by admin: ${req.user.email}`);
+      
+      res.json({
+        success: true,
+        message: result.message,
+        postsCount: result.posts?.length || 0,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.message,
+        error: process.env.NODE_ENV === 'development' ? result.error : undefined
+      });
+    }
+  } catch (error) {
+    console.error('❌ Demo data seeding endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to seed demo data',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

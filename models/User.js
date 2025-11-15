@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   email: { 
     type: String, 
     required: true, 
-    unique: true, 
+   // unique: true, 
     lowercase: true, 
     trim: true,
     match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email']
@@ -47,7 +47,25 @@ const userSchema = new mongoose.Schema({
     size: Number,
     url: String
   },
-   // Blog-specific fields
+
+  // Comms professional specific fields
+  orgName: { 
+    type: String, 
+    required: function() { return this.role === 'comms'; } 
+  },
+  position: { type: String, default: '', maxlength: 100 },
+  bio: { type: String, default: '', maxlength: 500 },
+  
+  // Common fields
+  phoneNumber: { 
+    type: String, 
+    default: '',
+    match: [/^\+?[\d\s\-()]{10,}$/, 'Please provide a valid phone number']
+  },
+  country: { type: String, default: '', maxlength: 50 },
+  interests: [{ type: String, maxlength: 50 }],
+  
+  // Blog-specific fields
   bio: {
     type: String,
     maxlength: [500, 'Bio cannot exceed 500 characters']
@@ -73,24 +91,7 @@ const userSchema = new mongoose.Schema({
     twitter: String,
     linkedin: String
   },
-  
-  // Comms professional specific fields
-  orgName: { 
-    type: String, 
-    required: function() { return this.role === 'comms'; } 
-  },
-  position: { type: String, default: '', maxlength: 100 },
-  bio: { type: String, default: '', maxlength: 500 },
-  
-  // Common fields
-  phoneNumber: { 
-    type: String, 
-    default: '',
-    match: [/^\+?[\d\s\-()]{10,}$/, 'Please provide a valid phone number']
-  },
-  country: { type: String, default: '', maxlength: 50 },
-  interests: [{ type: String, maxlength: 50 }],
-  
+
   // Email verification
   isEmailVerified: { type: Boolean, default: false },
   emailVerificationToken: String,
@@ -116,6 +117,7 @@ const userSchema = new mongoose.Schema({
   toJSON: { 
     virtuals: true,
     transform: function(doc, ret) {
+      ret.name = `${ret.firstName} ${ret.surname} ${ret.lastName}`.trim();
       delete ret.password;
       delete ret.emailVerificationToken;
       delete ret.passwordResetToken;
@@ -136,9 +138,12 @@ userSchema.virtual('isLocked').get(function() {
 });
 
 // Indexes for better performance
-//userSchema.index({ email: 1 });
+userSchema.index({ email: 1 });
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ 'emailVerificationExpires': 1 }, { expireAfterSeconds: 0 });
+
+// Ensure virtuals are included in JSON
+userSchema.set('toJSON', { virtuals: true });
 
 // Password hashing middleware
 userSchema.pre('save', async function(next) {

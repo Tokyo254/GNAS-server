@@ -14,7 +14,7 @@ const blogPostSchema = new mongoose.Schema({
   fullContent: {
     type: String,
     required: [true, 'Content is required'],
-    maxlength: [10000, 'Content cannot exceed 10000 characters']
+    maxlength: [20000, 'Content cannot exceed 20000 characters']
   },
   author: {
     type: mongoose.Schema.ObjectId,
@@ -29,19 +29,54 @@ const blogPostSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  // Enhanced featured image structure
   featuredImage: {
+    url: {
+      type: String,
+      default: ''
+    },
+    filename: String,
+    originalName: String,
+    mimetype: String,
+    size: Number,
+    altText: {
+      type: String,
+      default: ''
+    },
+    caption: {
+      type: String,
+      default: ''
+    },
+    dimensions: {
+      width: Number,
+      height: Number
+    }
+  },
+  // Additional images for the blog post
+  galleryImages: [{
     url: String,
     filename: String,
     originalName: String,
     mimetype: String,
-    size: Number
-  },
+    size: Number,
+    altText: String,
+    caption: String,
+    dimensions: {
+      width: Number,
+      height: Number
+    }
+  }],
   attachments: [{
     filename: String,
     originalName: String,
     url: String,
     mimetype: String,
-    size: Number
+    size: Number,
+    type: {
+      type: String,
+      enum: ['document', 'image', 'video', 'audio', 'other'],
+      default: 'document'
+    }
   }],
   readTime: {
     type: String,
@@ -68,9 +103,32 @@ const blogPostSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true
+  },
+  // SEO fields
+  metaTitle: {
+    type: String,
+    maxlength: 200
+  },
+  metaDescription: {
+    type: String,
+    maxlength: 500
+  },
+  keywords: [String],
+  // Social media fields
+  socialMediaImage: {
+    url: String,
+    altText: String
+  },
+  // Analytics
+  lastViewed: Date,
+  popularScore: {
+    type: Number,
+    default: 0
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 // Virtual for likes count
@@ -78,21 +136,26 @@ blogPostSchema.virtual('likesCount').get(function() {
   return this.likes.length;
 });
 
-// Virtual for author details
-blogPostSchema.virtual('authorDetails', {
-  ref: 'User',
-  localField: 'author',
-  foreignField: '_id',
-  justOne: true
+// Virtual for comments count
+blogPostSchema.virtual('commentsCount', {
+  ref: 'Comment',
+  localField: '_id',
+  foreignField: 'post',
+  count: true
 });
 
-// Ensure virtual fields are serialized
-blogPostSchema.set('toJSON', { virtuals: true });
-blogPostSchema.set('toObject', { virtuals: true });
+// Indexes for better performance
+blogPostSchema.index({ slug: 1 });
+blogPostSchema.index({ status: 1, createdAt: -1 });
+blogPostSchema.index({ author: 1, createdAt: -1 });
+blogPostSchema.index({ 'likes': 1 });
+blogPostSchema.index({ categories: 1 });
+blogPostSchema.index({ popularScore: -1, createdAt: -1 });
 
-// Pre-save middleware to generate slug
+// Pre-save middleware to generate slug and calculate read time
 blogPostSchema.pre('save', function(next) {
-  if (this.headline && this.isModified('headline')) {
+  // Generate slug from headline
+  if (this.headline && (this.isModified('headline') || this.isNew)) {
     this.slug = this.headline
       .toLowerCase()
       .replace(/[^a-z0-9 -]/g, '')
@@ -100,15 +163,40 @@ blogPostSchema.pre('save', function(next) {
       .replace(/-+/g, '-')
       .substring(0, 100);
   }
+
+  // Calculate read time
+  if (this.fullContent && this.isModified('fullContent')) {
+    const wordsPerMinute = 200;
+    const wordCount = this.fullContent.trim().split(/\s+/).length;
+    const minutes = Math.ceil(wordCount / wordsPerMinute);
+    this.readTime = `${minutes} min read`;
+  }
+
+  // Generate meta description if not provided
+  if (!this.metaDescription && this.summary) {
+    this.metaDescription = this.summary.substring(0, 160);
+  }
+
+  // Generate meta title if not provided
+  if (!this.metaTitle && this.headline) {
+    this.metaTitle = this.headline.substring(0, 60);
+  }
+
   next();
 });
 
-// Calculate read time
-blogPostSchema.methods.calculateReadTime = function() {
-  const wordsPerMinute = 200;
-  const wordCount = this.fullContent.split(/\s+/).length;
-  const minutes = Math.ceil(wordCount / wordsPerMinute);
-  this.readTime = `${minutes} min read`;
+// Update popular score based on engagement
+blogPostSchema.methods.updatePopularScore = function() {
+  const likesWeight = 2;
+  const sharesWeight = 3;
+  const viewsWeight = 0.1;
+  
+  this.popularScore = 
+    (this.likesCount * likesWeight) + 
+    (this.shares * sharesWeight) + 
+    (this.views * viewsWeight);
+  
+  return this.save();
 };
 
 module.exports = mongoose.model('BlogPost', blogPostSchema);
