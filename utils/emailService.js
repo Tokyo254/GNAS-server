@@ -1,18 +1,21 @@
 // emailService.js
-const { Resend } = require('resend');
+const sgMail = require('@sendgrid/mail');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize SendGrid with API key
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Test email configuration
 const verifyEmailConfig = async () => {
   try {
     // Test by sending a simple email to yourself
-    const testEmail = await resend.emails.send({
+    const msg = {
+      to: process.env.ADMIN_EMAIL || 'admin@gnias.com',
       from: process.env.EMAIL_FROM,
-      to: process.env.ADMIN_EMAIL || 'admin@yourdomain.com',
       subject: 'Email Service Test',
       text: 'Email service is configured correctly!'
-    });
+    };
+
+    await sgMail.send(msg);
     console.log('✅ Email service is ready to send messages');
     return true;
   } catch (error) {
@@ -26,20 +29,16 @@ verifyEmailConfig();
 
 const sendEmail = async (to, subject, html, text = null) => {
   try {
-    const { data, error } = await resend.emails.send({
-      from: process.env.EMAIL_FROM,
+    const msg = {
       to,
+      from: process.env.EMAIL_FROM,
       subject,
       html,
-      text: text || subject // Fallback to subject if no text provided
-    });
+      text: text || subject
+    };
 
-    if (error) {
-      console.error('❌ Resend API error:', error);
-      return false;
-    }
-
-    console.log('✅ Email sent:', data.id);
+    await sgMail.send(msg);
+    console.log('✅ Email sent successfully');
     return true;
   } catch (error) {
     console.error('❌ Error sending email:', error);
@@ -242,7 +241,7 @@ const sendApprovalNotificationEmail = async (user) => {
 };
 
 const sendEndorsementApprovalRequest = async (user) => {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@yourdomain.com';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@gnias.com';
 
   const html = `
     <!DOCTYPE html>
